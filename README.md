@@ -1,6 +1,6 @@
 # `molc`
 
-`molc` is a mock (fake) language client for testing language servers.
+`molc` provides a mock (fake) language client for testing language servers.
 
 ## Usage
 
