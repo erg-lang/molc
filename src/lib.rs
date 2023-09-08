@@ -40,6 +40,7 @@ pub fn add_char(line: u32, character: u32, text: &str) -> TextDocumentContentCha
     }
 }
 
+/// Indicates an absolute position in the document.
 pub fn abs_pos(uri: Url, line: u32, col: u32) -> TextDocumentPositionParams {
     TextDocumentPositionParams {
         text_document: TextDocumentIdentifier::new(uri),
@@ -50,6 +51,7 @@ pub fn abs_pos(uri: Url, line: u32, col: u32) -> TextDocumentPositionParams {
     }
 }
 
+/// Indicates a range of one line.
 pub fn oneline_range(line: u32, from: u32, to: u32) -> Range {
     Range {
         start: Position {
@@ -63,6 +65,7 @@ pub fn oneline_range(line: u32, from: u32, to: u32) -> Range {
     }
 }
 
+/// Parses a sequence of LSP messages and returns them as a vector of `Value`s.
 pub fn parse_msgs(_input: &str) -> Vec<Value> {
     let mut input = _input;
     let mut msgs = Vec::new();
@@ -88,6 +91,7 @@ pub fn parse_msgs(_input: &str) -> Vec<Value> {
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/// Servers implementing this must return output with the `send_*` method provided by this trait.
 pub trait RedirectableStdout {
     fn sender(&self) -> Option<&Sender<Value>>;
 
@@ -133,6 +137,7 @@ pub trait RedirectableStdout {
 }
 
 pub trait LangServer {
+    /// Receive and process a message from the client. Output should be returned to the channel.
     fn dispatch(&mut self, msg: impl Into<Value>) -> Result<()>;
 }
 
@@ -140,6 +145,7 @@ pub struct FakeClient<LS: LangServer> {
     server: LS,
     receiver: Receiver<Value>,
     server_capas: Option<ServerCapabilities>,
+    /// Stores all messages received from the server.
     pub responses: Vec<Value>,
     #[allow(clippy::complexity)]
     request_handlers: HashMap<String, Box<dyn Fn(&Value, &mut LS) -> Result<()>>>,
@@ -161,6 +167,8 @@ impl<LS: LangServer> FakeClient<LS> {
         }
     }
 
+    /// Adds a handler for the request with the given method name.
+    /// When the client receives a request for the specified method, it executes the handler.
     pub fn add_request_handler(
         &mut self,
         method_name: impl Into<String>,
@@ -170,6 +178,7 @@ impl<LS: LangServer> FakeClient<LS> {
             .insert(method_name.into(), Box::new(handler));
     }
 
+    /// Removes the handler for the request with the given method name.
     pub fn remove_request_handler(&mut self, method_name: &str) {
         self.request_handlers.remove(method_name);
     }
@@ -227,6 +236,7 @@ impl<LS: LangServer> FakeClient<LS> {
         }
     }
 
+    /// Send a request to the server.
     pub fn request<R: Request>(&mut self, params: R::Params) -> Result<R::Result> {
         let msg = json!({
             "jsonrpc": "2.0",
@@ -238,6 +248,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<R::Result>()
     }
 
+    /// Send a notification to the server.
     pub fn notify<N: Notification>(&mut self, params: N::Params) -> Result<()> {
         let msg = json!({
             "jsonrpc": "2.0",
@@ -248,6 +259,7 @@ impl<LS: LangServer> FakeClient<LS> {
         Ok(())
     }
 
+    /// Send an `initialize` request to the server.
     /// This will set the server capabilities
     pub fn request_initialize(&mut self) -> Result<InitializeResult> {
         let msg = json!({
@@ -261,6 +273,7 @@ impl<LS: LangServer> FakeClient<LS> {
         Ok(res)
     }
 
+    /// Send a `textDocument/didOpen` notification to the server.
     pub fn notify_open(&mut self, file: &str) -> Result<()> {
         let uri = Url::from_file_path(Path::new(file).canonicalize().unwrap()).unwrap();
         let mut text = String::new();
@@ -278,6 +291,7 @@ impl<LS: LangServer> FakeClient<LS> {
         Ok(())
     }
 
+    /// Send a `textDocument/didChange` notification to the server.
     pub fn notify_change(
         &mut self,
         uri: Url,
@@ -297,6 +311,7 @@ impl<LS: LangServer> FakeClient<LS> {
         Ok(())
     }
 
+    /// Send a `textDocument/didSave` notification to the server.
     pub fn notify_save(&mut self, uri: Url) -> Result<()> {
         let params = TextDocumentIdentifier::new(uri);
         let msg = json!({
@@ -308,6 +323,7 @@ impl<LS: LangServer> FakeClient<LS> {
         Ok(())
     }
 
+    /// Send a `textDocument/didClose` notification to the server.
     pub fn notify_close(&mut self, uri: Url) -> Result<()> {
         let params = TextDocumentIdentifier::new(uri);
         let msg = json!({
@@ -329,6 +345,7 @@ impl<LS: LangServer> FakeClient<LS> {
         })
     }
 
+    /// Send a `textDocument/completion` request to the server.
     pub fn request_completion(
         &mut self,
         uri: Url,
@@ -365,6 +382,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<CompletionResponse>>()
     }
 
+    /// Send a `textDocument/rename` request to the server.
     pub fn request_rename(
         &mut self,
         uri: Url,
@@ -388,6 +406,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<WorkspaceEdit>>()
     }
 
+    /// Send a `textDocument/signatureHelp` request to the server.
     pub fn request_signature_help(
         &mut self,
         uri: Url,
@@ -417,6 +436,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<SignatureHelp>>()
     }
 
+    /// Send a `textDocument/hover` request to the server.
     pub fn request_hover(&mut self, uri: Url, line: u32, col: u32) -> Result<Option<Hover>> {
         let params = HoverParams {
             text_document_position_params: abs_pos(uri, line, col),
@@ -432,6 +452,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<Hover>>()
     }
 
+    /// Send a `textDocument/references` request to the server.
     pub fn request_references(
         &mut self,
         uri: Url,
@@ -457,6 +478,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<Vec<Location>>>()
     }
 
+    /// Send a `textDocument/definition` request to the server.
     pub fn request_goto_definition(
         &mut self,
         uri: Url,
@@ -478,6 +500,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<GotoDefinitionResponse>>()
     }
 
+    /// Send a `textDocument/foldingRange` request to the server.
     pub fn request_folding_range(&mut self, uri: Url) -> Result<Option<Vec<FoldingRange>>> {
         let params = FoldingRangeParams {
             text_document: TextDocumentIdentifier::new(uri),
@@ -494,6 +517,7 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<Vec<FoldingRange>>>()
     }
 
+    /// Send a `textDocument/documentSymbol` request to the server.
     pub fn request_document_symbols(&mut self, uri: Url) -> Result<Option<DocumentSymbolResponse>> {
         let params = DocumentSymbolParams {
             text_document: TextDocumentIdentifier::new(uri),

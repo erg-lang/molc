@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::{Number, Value};
 
+/// Represents the JSON-RPC of the error response.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorMessage {
     jsonrpc: String,
@@ -20,6 +21,7 @@ impl ErrorMessage {
     }
 }
 
+/// Represents the JSON-RPC of the `window/logMessage` notification.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LogMessage {
     jsonrpc: String,
@@ -42,6 +44,7 @@ impl LogMessage {
     }
 }
 
+/// Represents the JSON-RPC of the `window/showMessage` notification.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ShowMessage {
     jsonrpc: String,
