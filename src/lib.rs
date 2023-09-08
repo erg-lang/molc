@@ -3,8 +3,11 @@ pub mod messages;
 use std::fs::File;
 use std::io::{stdout, Read, Write};
 use std::path::Path;
-use std::{collections::HashMap, sync::mpsc::Sender};
+use std::collections::HashMap;
+use std::sync::mpsc::{Receiver, Sender};
 
+use lsp_types::notification::Notification;
+use lsp_types::request::Request;
 use lsp_types::{
     CompletionContext, CompletionParams, CompletionResponse, CompletionTriggerKind,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
@@ -135,7 +138,7 @@ pub trait LangServer {
 
 pub struct FakeClient<LS: LangServer> {
     server: LS,
-    receiver: std::sync::mpsc::Receiver<Value>,
+    receiver: Receiver<Value>,
     server_capas: Option<ServerCapabilities>,
     pub responses: Vec<Value>,
     #[allow(clippy::complexity)]
@@ -146,7 +149,7 @@ pub struct FakeClient<LS: LangServer> {
 
 impl<LS: LangServer> FakeClient<LS> {
     /// The server should send responses to the channel at least during testing.
-    pub fn new(server: LS, receiver: std::sync::mpsc::Receiver<Value>) -> Self {
+    pub fn new(server: LS, receiver: Receiver<Value>) -> Self {
         FakeClient {
             receiver,
             responses: Vec::new(),
@@ -224,6 +227,27 @@ impl<LS: LangServer> FakeClient<LS> {
         }
     }
 
+    pub fn request<R: Request>(&mut self, params: R::Params) -> Result<R::Result> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": R::METHOD,
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<R::Result>()
+    }
+
+    pub fn notify<N: Notification>(&mut self, params: N::Params) -> Result<()> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "method": N::METHOD,
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        Ok(())
+    }
+
     /// This will set the server capabilities
     pub fn request_initialize(&mut self) -> Result<InitializeResult> {
         let msg = json!({
@@ -267,6 +291,28 @@ impl<LS: LangServer> FakeClient<LS> {
         let msg = json!({
             "jsonrpc": "2.0",
             "method": "textDocument/didChange",
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        Ok(())
+    }
+
+    pub fn notify_save(&mut self, uri: Url) -> Result<()> {
+        let params = TextDocumentIdentifier::new(uri);
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didSave",
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        Ok(())
+    }
+
+    pub fn notify_close(&mut self, uri: Url) -> Result<()> {
+        let params = TextDocumentIdentifier::new(uri);
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didClose",
             "params": params,
         });
         self.server.dispatch(msg)?;
