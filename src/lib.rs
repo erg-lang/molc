@@ -1,9 +1,9 @@
 pub mod messages;
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{stdout, Read, Write};
 use std::path::Path;
+use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 
 use lsp_types::notification::Notification;
@@ -89,11 +89,7 @@ pub fn parse_msgs(_input: &str) -> Vec<Value> {
     msgs
 }
 
-use std::error::Error;
-pub type Result<T> = std::result::Result<T, Box<dyn Error + Send>>;
-fn convert_err(e: impl Error + Send + 'static) -> Box<dyn Error + Send> {
-    Box::new(e)
-}
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 /// Servers implementing this must return output with the `send_*` method provided by this trait.
 pub trait RedirectableStdout {
@@ -101,14 +97,12 @@ pub trait RedirectableStdout {
 
     fn send_stdout<T: ?Sized + Serialize>(&self, message: &T) -> Result<()> {
         if let Some(sender) = self.sender() {
-            sender
-                .send(serde_json::to_value(message).map_err(convert_err)?)
-                .map_err(convert_err)?;
+            sender.send(serde_json::to_value(message)?)?;
         } else {
-            let msg = serde_json::to_string(message).map_err(convert_err)?;
+            let msg = serde_json::to_string(message)?;
             let mut stdout = stdout().lock();
-            write!(stdout, "Content-Length: {}\r\n\r\n{}", msg.len(), msg).map_err(convert_err)?;
-            stdout.flush().map_err(convert_err)?;
+            write!(stdout, "Content-Length: {}\r\n\r\n{}", msg.len(), msg)?;
+            stdout.flush()?;
         }
         Ok(())
     }
@@ -187,13 +181,6 @@ impl<LS: LangServer> FakeClient<LS> {
     /// Removes the handler for the request with the given method name.
     pub fn remove_request_handler(&mut self, method_name: &str) {
         self.request_handlers.remove(method_name);
-    }
-
-    pub fn enable_log_display(&mut self) {
-        self.add_request_handler("window/logMessage", |v, _s| {
-            println!("window/logMessage: {v}");
-            Ok(())
-        });
     }
 
     /// Waits for `n` messages to be received.
@@ -290,10 +277,7 @@ impl<LS: LangServer> FakeClient<LS> {
     pub fn notify_open(&mut self, file: &str) -> Result<()> {
         let uri = Url::from_file_path(Path::new(file).canonicalize().unwrap()).unwrap();
         let mut text = String::new();
-        File::open(file)
-            .unwrap()
-            .read_to_string(&mut text)
-            .map_err(convert_err)?;
+        File::open(file).unwrap().read_to_string(&mut text)?;
         let params = DidOpenTextDocumentParams {
             text_document: TextDocumentItem::new(uri, "erg".to_string(), self.ver, text),
         };
