@@ -16,7 +16,7 @@ use lsp_types::{
     ReferenceContext, ReferenceParams, RenameParams, ServerCapabilities, SignatureHelp,
     SignatureHelpContext, SignatureHelpParams, SignatureHelpTriggerKind,
     TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
-    TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, InitializedParams,
+    TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, InitializedParams, InlayHintParams, InlayHint,
 };
 use serde::de::Deserialize;
 use serde::Serialize;
@@ -566,5 +566,31 @@ impl<LS: LangServer> FakeClient<LS> {
         });
         self.server.dispatch(msg)?;
         self.wait_for::<Option<DocumentSymbolResponse>>()
+    }
+
+    /// Send a `textDocument/inlayHint` request to the server.
+    pub fn request_inlay_hint(&mut self, uri: Url) -> Result<Option<Vec<InlayHint>>> {
+        let params = InlayHintParams {
+            text_document: TextDocumentIdentifier::new(uri),
+            range: Range {
+                start: Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: Position {
+                    line: u32::MAX,
+                    character: u32::MAX,
+                },
+            },
+            work_done_progress_params: Default::default(),
+        };
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": "textDocument/inlayHint",
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<Option<Vec<InlayHint>>>()
     }
 }
