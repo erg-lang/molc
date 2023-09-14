@@ -16,7 +16,7 @@ use lsp_types::{
     ReferenceContext, ReferenceParams, RenameParams, ServerCapabilities, SignatureHelp,
     SignatureHelpContext, SignatureHelpParams, SignatureHelpTriggerKind,
     TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
-    TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier, WorkspaceEdit,
+    TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, InitializedParams,
 };
 use serde::de::Deserialize;
 use serde::Serialize;
@@ -273,6 +273,29 @@ impl<LS: LangServer> FakeClient<LS> {
         Ok(res)
     }
 
+    /// Send an `initialized` notification to the server.
+    pub fn notify_initialized(&mut self) -> Result<()> {
+        let params = InitializedParams {};
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "method": "initialized",
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        Ok(())
+    }
+
+    /// Send an `exit` notification to the server.
+    pub fn notify_exit(&mut self) -> Result<()> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "method": "exit",
+            "params": null,
+        });
+        self.server.dispatch(msg)?;
+        Ok(())
+    }
+
     /// Send a `textDocument/didOpen` notification to the server.
     pub fn notify_open(&mut self, file: &str) -> Result<()> {
         let uri = Url::from_file_path(Path::new(file).canonicalize().unwrap()).unwrap();
@@ -343,6 +366,17 @@ impl<LS: LangServer> FakeClient<LS> {
                     .is_some_and(|chars| chars.iter().any(|c| c == character))
             })
         })
+    }
+
+    /// Send a `shutdown` request to the server.
+    pub fn request_shutdown(&mut self) -> Result<()> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": "shutdown",
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<()>()
     }
 
     /// Send a `textDocument/completion` request to the server.
