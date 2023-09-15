@@ -1,22 +1,29 @@
 pub mod messages;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{stdout, Read, Write};
 use std::path::Path;
-use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 
 use lsp_types::notification::Notification;
 use lsp_types::request::Request;
 use lsp_types::{
+    ClientCapabilities, CodeActionClientCapabilities, CompletionClientCapabilities,
     CompletionContext, CompletionParams, CompletionResponse, CompletionTriggerKind,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentSymbolParams,
-    DocumentSymbolResponse, FoldingRange, FoldingRangeParams, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, InitializeResult, Location, Position, Range,
-    ReferenceContext, ReferenceParams, RenameParams, ServerCapabilities, SignatureHelp,
-    SignatureHelpContext, SignatureHelpParams, SignatureHelpTriggerKind,
-    TextDocumentContentChangeEvent, TextDocumentIdentifier, TextDocumentItem,
-    TextDocumentPositionParams, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, InitializedParams, InlayHintParams, InlayHint,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentLinkClientCapabilities,
+    DocumentSymbolClientCapabilities, DocumentSymbolParams, DocumentSymbolResponse,
+    DynamicRegistrationClientCapabilities, FoldingRange, FoldingRangeClientCapabilities,
+    FoldingRangeParams, GotoCapability, GotoDefinitionParams, GotoDefinitionResponse, Hover,
+    HoverClientCapabilities, HoverParams, InitializeParams, InitializeResult, InitializedParams,
+    InlayHint, InlayHintClientCapabilities, InlayHintParams, Location, MarkupKind, Position,
+    PublishDiagnosticsClientCapabilities, Range, ReferenceContext, ReferenceParams,
+    RenameClientCapabilities, RenameParams, SelectionRangeClientCapabilities,
+    SemanticTokensClientCapabilities, ServerCapabilities, SignatureHelp,
+    SignatureHelpClientCapabilities, SignatureHelpContext, SignatureHelpParams,
+    SignatureHelpTriggerKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent,
+    TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
+    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, DidSaveTextDocumentParams,
 };
 use serde::de::Deserialize;
 use serde::Serialize;
@@ -29,6 +36,7 @@ fn safe_yield() {
     std::thread::sleep(std::time::Duration::from_millis(10));
 }
 
+/// Adds a character at the given position.
 pub fn add_char(line: u32, character: u32, text: &str) -> TextDocumentContentChangeEvent {
     TextDocumentContentChangeEvent {
         range: Some(Range {
@@ -37,6 +45,51 @@ pub fn add_char(line: u32, character: u32, text: &str) -> TextDocumentContentCha
         }),
         range_length: None,
         text: text.to_string(),
+    }
+}
+
+/// Changes the text at the given position.
+pub fn change_text(line: u32, character: u32, text: &str) -> TextDocumentContentChangeEvent {
+    TextDocumentContentChangeEvent {
+        range: Some(Range {
+            start: Position { line, character },
+            end: Position {
+                line,
+                character: character + text.chars().count() as u32,
+            },
+        }),
+        range_length: None,
+        text: text.to_string(),
+    }
+}
+
+/// Deletes the text at the given range.
+pub fn delete_text(line: u32, character: u32, len: u32) -> TextDocumentContentChangeEvent {
+    TextDocumentContentChangeEvent {
+        range: Some(Range {
+            start: Position { line, character },
+            end: Position {
+                line,
+                character: character + len,
+            },
+        }),
+        range_length: Some(len),
+        text: "".to_string(),
+    }
+}
+
+/// Deletes the line at the given index.
+pub fn delete_line(line: u32) -> TextDocumentContentChangeEvent {
+    TextDocumentContentChangeEvent {
+        range: Some(Range {
+            start: Position { line, character: 0 },
+            end: Position {
+                line: line + 1,
+                character: 0,
+            },
+        }),
+        range_length: None,
+        text: "".to_string(),
     }
 }
 
@@ -142,9 +195,10 @@ pub trait LangServer {
 }
 
 pub struct FakeClient<LS: LangServer> {
-    server: LS,
+    pub server: LS,
     receiver: Receiver<Value>,
-    server_capas: Option<ServerCapabilities>,
+    pub client_capas: ClientCapabilities,
+    pub server_capas: Option<ServerCapabilities>,
     /// Stores all messages received from the server.
     pub responses: Vec<Value>,
     #[allow(clippy::complexity)]
@@ -161,6 +215,85 @@ impl<LS: LangServer> FakeClient<LS> {
             responses: Vec::new(),
             ver: 0,
             req_id: 0,
+            client_capas: ClientCapabilities {
+                text_document: Some(TextDocumentClientCapabilities {
+                    synchronization: Some(TextDocumentSyncClientCapabilities {
+                        did_save: Some(true),
+                        ..Default::default()
+                    }),
+                    completion: Some(CompletionClientCapabilities {
+                        completion_item: Some(Default::default()),
+                        completion_item_kind: Some(Default::default()),
+                        ..Default::default()
+                    }),
+                    hover: Some(HoverClientCapabilities {
+                        content_format: Some(vec![MarkupKind::PlainText]),
+                        ..Default::default()
+                    }),
+                    signature_help: Some(SignatureHelpClientCapabilities {
+                        signature_information: Some(Default::default()),
+                        ..Default::default()
+                    }),
+                    references: Some(DynamicRegistrationClientCapabilities::default()),
+                    document_highlight: Some(DynamicRegistrationClientCapabilities::default()),
+                    document_symbol: Some(DocumentSymbolClientCapabilities {
+                        ..Default::default()
+                    }),
+                    formatting: Some(DynamicRegistrationClientCapabilities::default()),
+                    range_formatting: Some(DynamicRegistrationClientCapabilities::default()),
+                    on_type_formatting: Some(DynamicRegistrationClientCapabilities::default()),
+                    declaration: Some(GotoCapability {
+                        link_support: Some(true),
+                        ..Default::default()
+                    }),
+                    definition: Some(GotoCapability {
+                        link_support: Some(true),
+                        ..Default::default()
+                    }),
+                    type_definition: Some(GotoCapability {
+                        link_support: Some(true),
+                        ..Default::default()
+                    }),
+                    implementation: Some(GotoCapability {
+                        link_support: Some(true),
+                        ..Default::default()
+                    }),
+                    code_action: Some(CodeActionClientCapabilities {
+                        data_support: Some(true),
+                        ..Default::default()
+                    }),
+                    code_lens: Some(DynamicRegistrationClientCapabilities::default()),
+                    document_link: Some(DocumentLinkClientCapabilities {
+                        tooltip_support: Some(true),
+                        dynamic_registration: Some(false),
+                    }),
+                    color_provider: Some(DynamicRegistrationClientCapabilities::default()),
+                    rename: Some(RenameClientCapabilities {
+                        prepare_support: Some(true),
+                        ..Default::default()
+                    }),
+                    publish_diagnostics: Some(PublishDiagnosticsClientCapabilities {
+                        related_information: Some(true),
+                        ..Default::default()
+                    }),
+                    folding_range: Some(FoldingRangeClientCapabilities {
+                        ..Default::default()
+                    }),
+                    selection_range: Some(SelectionRangeClientCapabilities {
+                        ..Default::default()
+                    }),
+                    linked_editing_range: Some(DynamicRegistrationClientCapabilities::default()),
+                    call_hierarchy: Some(DynamicRegistrationClientCapabilities::default()),
+                    semantic_tokens: Some(SemanticTokensClientCapabilities {
+                        ..Default::default()
+                    }),
+                    moniker: Some(DynamicRegistrationClientCapabilities::default()),
+                    inlay_hint: Some(InlayHintClientCapabilities {
+                        ..Default::default()
+                    }),
+                }),
+                ..Default::default()
+            },
             server_capas: None,
             request_handlers: HashMap::new(),
             server,
@@ -262,10 +395,15 @@ impl<LS: LangServer> FakeClient<LS> {
     /// Send an `initialize` request to the server.
     /// This will set the server capabilities
     pub fn request_initialize(&mut self) -> Result<InitializeResult> {
+        let params = InitializeParams {
+            capabilities: self.client_capas.clone(),
+            ..Default::default()
+        };
         let msg = json!({
             "jsonrpc": "2.0",
             "id": self.req_id,
             "method": "initialize",
+            "params": params,
         });
         self.server.dispatch(msg)?;
         let res = self.wait_for::<InitializeResult>()?;
@@ -336,7 +474,10 @@ impl<LS: LangServer> FakeClient<LS> {
 
     /// Send a `textDocument/didSave` notification to the server.
     pub fn notify_save(&mut self, uri: Url) -> Result<()> {
-        let params = TextDocumentIdentifier::new(uri);
+        let params = DidSaveTextDocumentParams {
+            text_document: TextDocumentIdentifier::new(uri),
+            text: None,
+        };
         let msg = json!({
             "jsonrpc": "2.0",
             "method": "textDocument/didSave",
