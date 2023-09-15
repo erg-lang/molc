@@ -202,7 +202,7 @@ pub struct FakeClient<LS: LangServer> {
     /// Stores all messages received from the server.
     pub responses: Vec<Value>,
     #[allow(clippy::complexity)]
-    request_handlers: HashMap<String, Box<dyn Fn(&Value, &mut LS) -> Result<()>>>,
+    handlers: HashMap<String, Box<dyn Fn(&Value, &mut LS) -> Result<()>>>,
     ver: i32,
     req_id: i64,
 }
@@ -295,25 +295,33 @@ impl<LS: LangServer> FakeClient<LS> {
                 ..Default::default()
             },
             server_capas: None,
-            request_handlers: HashMap::new(),
+            handlers: HashMap::new(),
             server,
         }
     }
 
-    /// Adds a handler for the request with the given method name.
-    /// When the client receives a request for the specified method, it executes the handler.
-    pub fn add_request_handler(
+    /// Adds a handler for the request/notification with the given method name.
+    /// When the client receives a request/notification for the specified method, it executes the handler.
+    pub fn add_handler(
         &mut self,
         method_name: impl Into<String>,
         handler: impl Fn(&Value, &mut LS) -> Result<()> + 'static,
     ) {
-        self.request_handlers
+        self.handlers
             .insert(method_name.into(), Box::new(handler));
     }
 
-    /// Removes the handler for the request with the given method name.
-    pub fn remove_request_handler(&mut self, method_name: &str) {
-        self.request_handlers.remove(method_name);
+    /// Removes the handler for the request/notification with the given method name.
+    pub fn remove_handler(&mut self, method_name: &str) {
+        self.handlers.remove(method_name);
+    }
+
+    pub fn enable_log_display(&mut self) {
+        self.add_handler("window/logMessage", |msg, _| {
+            let msg = LogMessage::deserialize(msg.clone())?;
+            println!("[LOG]: {}", &msg.params["message"]);
+            Ok(())
+        });
     }
 
     /// Waits for `n` messages to be received.
@@ -321,8 +329,8 @@ impl<LS: LangServer> FakeClient<LS> {
     pub fn wait_messages(&mut self, n: usize) -> Result<()> {
         for _ in 0..n {
             if let Ok(msg) = self.receiver.recv() {
-                if msg.get("method").is_some_and(|_| msg.get("id").is_some()) {
-                    self.handle_server_request(&msg);
+                if msg.get("method").is_some() {
+                    self.handle_server_message(&msg);
                 }
                 self.responses.push(msg);
             }
@@ -339,8 +347,8 @@ impl<LS: LangServer> FakeClient<LS> {
     {
         loop {
             if let Ok(msg) = self.receiver.recv() {
-                if msg.get("method").is_some_and(|_| msg.get("id").is_some()) {
-                    self.handle_server_request(&msg);
+                if msg.get("method").is_some() {
+                    self.handle_server_message(&msg);
                 }
                 self.responses.push(msg);
                 let msg = self.responses.last().unwrap();
@@ -359,9 +367,9 @@ impl<LS: LangServer> FakeClient<LS> {
         }
     }
 
-    fn handle_server_request(&mut self, msg: &Value) {
+    fn handle_server_message(&mut self, msg: &Value) {
         if let Some(method) = msg.get("method").and_then(|val| val.as_str()) {
-            if let Some(handler) = self.request_handlers.get(method) {
+            if let Some(handler) = self.handlers.get(method) {
                 if let Err(err) = handler(msg, &mut self.server) {
                     eprintln!("error: {:?}", err);
                 }

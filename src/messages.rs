@@ -7,7 +7,7 @@ use serde_json::{Number, Value};
 pub struct ErrorMessage {
     jsonrpc: String,
     id: Option<Number>,
-    error: Value,
+    pub error: Value,
 }
 
 impl ErrorMessage {
@@ -26,7 +26,7 @@ impl ErrorMessage {
 pub struct LogMessage {
     jsonrpc: String,
     method: String,
-    params: Value,
+    pub params: Value,
 }
 
 impl LogMessage {
@@ -49,7 +49,7 @@ impl LogMessage {
 pub struct ShowMessage {
     jsonrpc: String,
     method: String,
-    params: Value,
+    pub params: Value,
 }
 
 impl ShowMessage {
