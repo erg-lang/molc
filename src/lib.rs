@@ -11,19 +11,19 @@ use lsp_types::request::Request;
 use lsp_types::{
     ClientCapabilities, CodeActionClientCapabilities, CompletionClientCapabilities,
     CompletionContext, CompletionParams, CompletionResponse, CompletionTriggerKind,
-    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentLinkClientCapabilities,
-    DocumentSymbolClientCapabilities, DocumentSymbolParams, DocumentSymbolResponse,
-    DynamicRegistrationClientCapabilities, FoldingRange, FoldingRangeClientCapabilities,
-    FoldingRangeParams, GotoCapability, GotoDefinitionParams, GotoDefinitionResponse, Hover,
-    HoverClientCapabilities, HoverParams, InitializeParams, InitializeResult, InitializedParams,
-    InlayHint, InlayHintClientCapabilities, InlayHintParams, Location, MarkupKind, Position,
-    PublishDiagnosticsClientCapabilities, Range, ReferenceContext, ReferenceParams,
-    RenameClientCapabilities, RenameParams, SelectionRangeClientCapabilities,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+    DocumentLinkClientCapabilities, DocumentSymbolClientCapabilities, DocumentSymbolParams,
+    DocumentSymbolResponse, DynamicRegistrationClientCapabilities, FoldingRange,
+    FoldingRangeClientCapabilities, FoldingRangeParams, GotoCapability, GotoDefinitionParams,
+    GotoDefinitionResponse, Hover, HoverClientCapabilities, HoverParams, InitializeParams,
+    InitializeResult, InitializedParams, InlayHint, InlayHintClientCapabilities, InlayHintParams,
+    Location, MarkupKind, Position, PublishDiagnosticsClientCapabilities, Range, ReferenceContext,
+    ReferenceParams, RenameClientCapabilities, RenameParams, SelectionRangeClientCapabilities,
     SemanticTokensClientCapabilities, ServerCapabilities, SignatureHelp,
     SignatureHelpClientCapabilities, SignatureHelpContext, SignatureHelpParams,
     SignatureHelpTriggerKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent,
     TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
-    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, DidSaveTextDocumentParams,
+    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit,
 };
 use serde::de::Deserialize;
 use serde::Serialize;
@@ -307,8 +307,7 @@ impl<LS: LangServer> FakeClient<LS> {
         method_name: impl Into<String>,
         handler: impl Fn(&Value, &mut LS) -> Result<()> + 'static,
     ) {
-        self.handlers
-            .insert(method_name.into(), Box::new(handler));
+        self.handlers.insert(method_name.into(), Box::new(handler));
     }
 
     /// Removes the handler for the request/notification with the given method name.
