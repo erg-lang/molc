@@ -6,7 +6,7 @@ use std::io::{stdout, Read, Write};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
 
-use lsp_types::notification::Notification;
+use lsp_types::notification::{Notification, PublishDiagnostics};
 use lsp_types::request::Request;
 use lsp_types::{
     ClientCapabilities, CodeActionClientCapabilities, CompletionClientCapabilities,
@@ -23,7 +23,7 @@ use lsp_types::{
     SignatureHelpClientCapabilities, SignatureHelpContext, SignatureHelpParams,
     SignatureHelpTriggerKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent,
     TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
-    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit,
+    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, PublishDiagnosticsParams,
 };
 use serde::de::Deserialize;
 use serde::Serialize;
@@ -335,6 +335,28 @@ impl<LS: LangServer> FakeClient<LS> {
             }
         }
         Ok(())
+    }
+
+    pub fn wait_diagnostics(&mut self) -> Result<PublishDiagnosticsParams> {
+        loop {
+            if let Ok(msg) = self.receiver.recv() {
+                if msg.get("method").is_some() {
+                    self.handle_server_message(&msg);
+                }
+                self.responses.push(msg);
+                let msg = self.responses.last().unwrap();
+                if msg.get("method").is_some_and(|val| val == PublishDiagnostics::METHOD) {
+                    if let Some(result) = msg
+                        .get("params")
+                        .cloned()
+                        .and_then(|res| PublishDiagnosticsParams::deserialize(res).ok())
+                    {
+                        return Ok(result);
+                    }
+                }
+            }
+            safe_yield();
+        }
     }
 
     /// Waits for a response to the request, where its `id` is expected to be that of `req_id`,
