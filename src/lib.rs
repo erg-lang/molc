@@ -9,21 +9,22 @@ use std::sync::mpsc::{Receiver, Sender};
 use lsp_types::notification::{Notification, PublishDiagnostics};
 use lsp_types::request::Request;
 use lsp_types::{
-    ClientCapabilities, CodeActionClientCapabilities, CompletionClientCapabilities,
-    CompletionContext, CompletionParams, CompletionResponse, CompletionTriggerKind,
+    ClientCapabilities, CodeAction, CodeActionClientCapabilities, CodeActionContext,
+    CodeActionParams, CodeActionResponse, CodeLens, CodeLensParams, CompletionClientCapabilities,
+    CompletionContext, CompletionItem, CompletionParams, CompletionResponse, CompletionTriggerKind,
     DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
     DocumentLinkClientCapabilities, DocumentSymbolClientCapabilities, DocumentSymbolParams,
     DocumentSymbolResponse, DynamicRegistrationClientCapabilities, FoldingRange,
     FoldingRangeClientCapabilities, FoldingRangeParams, GotoCapability, GotoDefinitionParams,
     GotoDefinitionResponse, Hover, HoverClientCapabilities, HoverParams, InitializeParams,
     InitializeResult, InitializedParams, InlayHint, InlayHintClientCapabilities, InlayHintParams,
-    Location, MarkupKind, Position, PublishDiagnosticsClientCapabilities, Range, ReferenceContext,
-    ReferenceParams, RenameClientCapabilities, RenameParams, SelectionRangeClientCapabilities,
-    SemanticTokensClientCapabilities, ServerCapabilities, SignatureHelp,
-    SignatureHelpClientCapabilities, SignatureHelpContext, SignatureHelpParams,
+    Location, MarkupKind, Position, PublishDiagnosticsClientCapabilities, PublishDiagnosticsParams,
+    Range, ReferenceContext, ReferenceParams, RenameClientCapabilities, RenameParams,
+    SelectionRangeClientCapabilities, SemanticTokensClientCapabilities, ServerCapabilities,
+    SignatureHelp, SignatureHelpClientCapabilities, SignatureHelpContext, SignatureHelpParams,
     SignatureHelpTriggerKind, TextDocumentClientCapabilities, TextDocumentContentChangeEvent,
     TextDocumentIdentifier, TextDocumentItem, TextDocumentPositionParams,
-    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit, PublishDiagnosticsParams,
+    TextDocumentSyncClientCapabilities, Url, VersionedTextDocumentIdentifier, WorkspaceEdit,
 };
 use serde::de::Deserialize;
 use serde::Serialize;
@@ -345,7 +346,10 @@ impl<LS: LangServer> FakeClient<LS> {
                 }
                 self.responses.push(msg);
                 let msg = self.responses.last().unwrap();
-                if msg.get("method").is_some_and(|val| val == PublishDiagnostics::METHOD) {
+                if msg
+                    .get("method")
+                    .is_some_and(|val| val == PublishDiagnostics::METHOD)
+                {
                     if let Some(result) = msg
                         .get("params")
                         .cloned()
@@ -586,6 +590,21 @@ impl<LS: LangServer> FakeClient<LS> {
         self.wait_for::<Option<CompletionResponse>>()
     }
 
+    /// Send a `completionItem/resolve` request to the server.
+    pub fn request_completion_item_resolve(
+        &mut self,
+        completion_item: CompletionItem,
+    ) -> Result<CompletionItem> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": "completionItem/resolve",
+            "params": completion_item,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<CompletionItem>()
+    }
+
     /// Send a `textDocument/rename` request to the server.
     pub fn request_rename(
         &mut self,
@@ -762,5 +781,81 @@ impl<LS: LangServer> FakeClient<LS> {
         });
         self.server.dispatch(msg)?;
         self.wait_for::<Option<Vec<InlayHint>>>()
+    }
+
+    /// Send a `textDocument/codeAction` request to the server.
+    pub fn request_code_action(
+        &mut self,
+        uri: Url,
+        line: u32,
+        col: u32,
+    ) -> Result<Option<CodeActionResponse>> {
+        let params = CodeActionParams {
+            text_document: TextDocumentIdentifier::new(uri),
+            range: Range {
+                start: Position {
+                    line,
+                    character: col,
+                },
+                end: Position {
+                    line,
+                    character: col,
+                },
+            },
+            context: CodeActionContext {
+                diagnostics: vec![],
+                only: None,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": lsp_types::request::CodeActionRequest::METHOD,
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<Option<CodeActionResponse>>()
+    }
+
+    pub fn request_code_action_resolve(&mut self, code_action: CodeAction) -> Result<CodeAction> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": lsp_types::request::CodeActionResolveRequest::METHOD,
+            "params": code_action,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<CodeAction>()
+    }
+
+    /// Send a `textDocument/codeLens` request to the server.
+    pub fn request_code_lens(&mut self, uri: Url) -> Result<Option<Vec<CodeLens>>> {
+        let params = CodeLensParams {
+            text_document: TextDocumentIdentifier::new(uri),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": lsp_types::request::CodeLensRequest::METHOD,
+            "params": params,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<Option<Vec<CodeLens>>>()
+    }
+
+    /// Send a `codeLens/resolve` request to the server.
+    pub fn request_code_lens_resolve(&mut self, code_lens: CodeLens) -> Result<CodeLens> {
+        let msg = json!({
+            "jsonrpc": "2.0",
+            "id": self.req_id,
+            "method": lsp_types::request::CodeLensResolve::METHOD,
+            "params": code_lens,
+        });
+        self.server.dispatch(msg)?;
+        self.wait_for::<CodeLens>()
     }
 }
