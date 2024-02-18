@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{stdout, Read, Write};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
+use std::time::Duration;
 
 use lsp_types::notification::{Notification, PublishDiagnostics};
 use lsp_types::request::Request;
@@ -301,6 +302,10 @@ impl<LS: LangServer> FakeClient<LS> {
         }
     }
 
+    pub fn with_capabilities(server: LS, receiver: Receiver<Value>, client_capas: ClientCapabilities) -> Self {
+        FakeClient { client_capas, ..FakeClient::new(server, receiver) }
+    }
+
     /// Adds a handler for the request/notification with the given method name.
     /// When the client receives a request/notification for the specified method, it executes the handler.
     pub fn add_handler(
@@ -366,7 +371,7 @@ impl<LS: LangServer> FakeClient<LS> {
     /// Waits for a response to the request, where its `id` is expected to be that of `req_id`,
     /// and `req_id` will be incremented if the response is successfully received.
     /// When a request is received, the registered handler will be executed.
-    fn wait_for<R>(&mut self) -> Result<R>
+    pub fn wait_for<R>(&mut self) -> Result<R>
     where
         R: Deserialize<'static>,
     {
@@ -387,6 +392,36 @@ impl<LS: LangServer> FakeClient<LS> {
                         return Ok(result);
                     }
                 }
+            }
+            safe_yield();
+        }
+    }
+
+    pub fn wait_with_timeout<R>(&mut self, timeout: Duration) -> Result<Option<R>>
+    where
+        R: Deserialize<'static>,
+    {
+        let start = std::time::Instant::now();
+        loop {
+            if let Ok(msg) = self.receiver.recv_timeout(std::time::Duration::from_millis(10)) {
+                if msg.get("method").is_some() {
+                    self.handle_server_message(&msg);
+                }
+                self.responses.push(msg);
+                let msg = self.responses.last().unwrap();
+                if msg.get("id").is_some_and(|val| val == self.req_id) {
+                    if let Some(result) = msg
+                        .get("result")
+                        .cloned()
+                        .and_then(|res| R::deserialize(res).ok())
+                    {
+                        self.req_id += 1;
+                        return Ok(Some(result));
+                    }
+                }
+            }
+            if start.elapsed() > timeout {
+                return Ok(None);
             }
             safe_yield();
         }

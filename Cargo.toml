@@ -1,6 +1,6 @@
 [package]
 name = "molc"
-version = "0.2.8"
+version = "0.3.0"
 description = "A mock language client for testing language servers"
 authors = ["erg-lang team <moderation.erglang@gmail.com>"]
 license = "MIT OR Apache-2.0"
