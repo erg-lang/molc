@@ -4,7 +4,7 @@
 
 ## Usage
 
-You can see specific examples of molc use in [ELS](https://github.com/erg-lang/erg/tree/main/crates/els).
+You can see specific examples of molc use in [ELS](https://github.com/erg-lang/erg/blob/main/crates/els/tests/test.rs).
 
 ```rust
 use lsp_types::{Url, Value};
